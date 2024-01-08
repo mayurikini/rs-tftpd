@@ -37,6 +37,8 @@ pub struct Config {
     pub duplicate_packets: u8,
     /// Overwrite existing files. (default: false)
     pub overwrite: bool,
+    /// Remap file path. (default: file path)
+    pub remap_file: PathBuf,
 }
 
 impl Config {
@@ -53,6 +55,7 @@ impl Config {
             read_only: false,
             duplicate_packets: 0,
             overwrite: false,
+            remap_file: PathBuf::new(),
         };
 
         args.next();
@@ -109,6 +112,17 @@ impl Config {
                 "-r" | "--read-only" => {
                     config.read_only = true;
                 }
+                "-m" | "--remap_file" => {
+                    // config.remap_file = true;
+                    if let Some(dir_str) = args.next() {
+                        if !Path::new(&dir_str).exists() {
+                            return Err(format!("{dir_str} does not exist").into());
+                        }
+                        config.remap_file = dir_str.into();
+                    } else {
+                        return Err("Missing map file after flag".into());
+                    }
+                }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
@@ -124,6 +138,7 @@ impl Config {
                     println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\tOverwrite existing files (default: false)");
+                    println!("  --remap_file\t\t\tOption specifies a file which contains filename remapping rules.");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -170,7 +185,7 @@ mod tests {
     fn parses_full_config() {
         let config = Config::new(
             [
-                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r",
+                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-m","/", "-s", "-r",
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -184,6 +199,7 @@ mod tests {
         assert_eq!(config.send_directory, PathBuf::from("/"));
         assert!(config.single_port);
         assert!(config.read_only);
+        assert_eq!(config.remap_file, PathBuf::from("/"));
     }
 
     #[test]
@@ -212,6 +228,13 @@ mod tests {
         let config = Config::new(["/", "-d", "/"].iter().map(|s| s.to_string())).unwrap();
 
         assert_eq!(config.send_directory, PathBuf::from("/"));
+    }
+
+    #[test]
+    fn sets_remap_file() {
+        let config = Config::new(["/", "-m", "/"].iter().map(|s| s.to_string())).unwrap();
+
+        assert_eq!(config.remap_file, PathBuf::from("/"));
     }
 
     #[test]
