@@ -3,10 +3,13 @@ use crate::{ErrorCode, Packet, TransferOption};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs::File;
+use std::io::{self, BufRead};
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+// use regex::Regex;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_BLOCK_SIZE: usize = 512;
@@ -31,6 +34,7 @@ pub struct Server {
     socket: UdpSocket,
     receive_directory: PathBuf,
     send_directory: PathBuf,
+    remap_file: PathBuf,
     single_port: bool,
     read_only: bool,
     overwrite: bool,
@@ -47,6 +51,7 @@ impl Server {
             socket,
             receive_directory: config.receive_directory.clone(),
             send_directory: config.send_directory.clone(),
+            remap_file: config.remap_file.clone(),
             single_port: config.single_port,
             read_only: config.read_only,
             overwrite: config.overwrite,
@@ -279,6 +284,24 @@ enum RequestType {
     Write,
 }
 
+fn apply_regex_rules(input_string: &str, regex_file_path: &str) -> String {
+    let mut formatted_string = String::from(input_string);
+    if let Ok(file) = File::open(regex_file_path) {
+        let reader = io::BufReader::new(file);
+        for line in reader.lines() {
+            if let Ok(rule) = line {
+                let parts: Vec<&str> = rule.split("//").collect();
+                if parts.len() == 2 {
+                    let find_str = parts[0].trim();
+                    let replace_str = parts[1].trim();
+                    formatted_string = formatted_string.replace(find_str, replace_str);
+                }
+            }
+        }
+    }
+    formatted_string
+}
+
 fn parse_options(
     options: &mut [TransferOption],
     request_type: RequestType,
@@ -392,6 +415,14 @@ fn validate_file_path(file: &Path, directory: &PathBuf) -> bool {
 mod tests {
     use super::*;
 
+    fn applies_regex_rules() {
+        let input_string = "this/re\\change";
+        let regex_file_path = "map.txt"; // Assuming the regex rules are stored in a file named "map.txt"
+        let output = apply_regex_rules(input_string, regex_file_path);
+        println!("Input String: \"{}\"", input_string);
+        println!("Output String: \"{}\"", output);
+        assert_eq!(output, "this/re/change");
+    }
     #[test]
     fn validates_file_path() {
         assert!(validate_file_path(
