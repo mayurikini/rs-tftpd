@@ -135,9 +135,20 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = convert_file_path(&filename);
-        let file_path = &self.send_directory.join(file_path);
-        match check_file_exists(file_path, &self.send_directory) {
+        let final_file_path;
+        
+        let file_path = &self.send_directory.join(filename.clone());
+        // if self.remap {
+        let formatted = file_path.to_string_lossy().to_string().replace("\\", "/");
+        final_file_path = PathBuf::from(formatted);
+        // } else {
+        //     final_file_path = PathBuf::from(file_path);
+        // }
+
+
+        // let file_path = convert_file_path(&filename);
+        // let file_path = &self.send_directory.join(file_path);
+        match check_file_exists(final_file_path, &self.send_directory) {
             ErrorCode::FileNotFound => Socket::send_to(
                 &self.socket,
                 &Packet::Error {
@@ -156,7 +167,7 @@ impl Server {
             ),
             ErrorCode::FileExists => {
                 let worker_options =
-                    parse_options(options, RequestType::Read(file_path.metadata()?.len()))?;
+                    parse_options(options, RequestType::Read(final_file_path.metadata()?.len()))?;
                 let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
@@ -176,12 +187,12 @@ impl Server {
                 accept_request(
                     &socket,
                     options,
-                    RequestType::Read(file_path.metadata()?.len()),
+                    RequestType::Read(final_file_path.metadata()?.len()),
                 )?;
 
                 let worker = Worker::new(
                     socket,
-                    file_path.clone(),
+                    final_file_path.clone(),
                     self.clean_on_error,
                     worker_options.block_size,
                     worker_options.timeout,
